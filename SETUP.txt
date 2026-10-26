@@ -1,0 +1,52 @@
+PAGPALIT: POSM KPI Command Center  →  POSM Deployment Tracker
+Parehong link (rmas-ce.github.io/RMAS-KPI-TOOL) at parehong Apps Script URL,
+kaya HINDI na kailangang galawin ang TS KPI Grading (VS-TS-GRADING).
+
+------------------------------------------------------------
+HAKBANG 1 — APPS SCRIPT (sa Google Sheet ng lumang Command Center)
+  1. Buksan ang Google Sheet ng POSM KPI Command Center → Extensions → Apps Script.
+  2. (Backup) Kopyahin muna ang lumang code at i-save sa Notepad, kung sakaling kailanganin.
+  3. Burahin ang laman ng Code.gs, i-paste ang bagong Code.gs, i-save.
+  4. Deploy → Manage deployments → Edit (lapis) → Version: New version → Deploy.
+     ⚠ HUWAG "New deployment" — magbabago ang URL. Dapat "Manage deployments → Edit".
+  Hindi mabubura ang lumang tabs/data ng Command Center. Gagawa ang bagong code ng
+  sariling tabs: DT_Stores, DT_Status, DT_Log.
+
+HAKBANG 2 — GITHUB (repo na RMAS-KPI-TOOL)
+  Upload files → i-upload ang bagong index.html (papalitan ang luma) → Commit.
+  Naka-lagay na sa loob ang Apps Script URL, wala nang kailangang i-edit.
+  (Ang lumang index.html ay nasa History ng repo kung kailangan mong balikan.)
+
+HAKBANG 3 — UNANG LOGIN
+  Buksan ang https://rmas-ce.github.io/RMAS-KPI-TOOL/ (i-refresh nang Ctrl+F5).
+  RMAS login → password: rmas2026 (bagong password ito ng tracker, hiwalay sa luma).
+  Sa unang login, automatic na ia-upload ang WK42 store list (1,028 stores, 98 TS).
+  Palitan agad ang password: Setup → Change password.
+
+HAKBANG 4 — CHECK SA GRADING
+  Sa VS-TS-GRADING → Pull ALL tools. Lalabas: "Deployment KPI Tool: xx store rows (…)".
+  Habang wala pang na-grade sa tracker, 0 store rows ang lalabas — normal iyon.
+
+------------------------------------------------------------
+PAANO DUMADALOY ANG DATA
+  RMAS mag-grade sa tracker (bawat store, AV / HA / AC)
+     → naka-save agad sa Google Sheet, kita sa lahat ng device sa loob ng 30 segundo
+     → Grading tool kumukuha para sa kasalukuyang buwan:
+          Complete                         → Complete
+          Complete – no stock              → Incomplete - Full Deployment (No Stock)        = credited
+          Complete – outdated display      → Incomplete - Full Deployment (Outdated Display) = credited
+          Incomplete POSM                  → Incomplete                                      = hindi credited
+          Not checked / N/A                → hindi kasama (hindi rin binibilang sa target)
+
+MGA PATAKARAN
+  • Per buwan simula October 2026. Bukas ang buwan hanggang ika-7 ng susunod na buwan
+    (October = hanggang Nov 7). Sa ika-8, LOCKED na sa server mismo.
+    Mapapalitan ang close day sa Setup → Monthly lock.
+  • Admin lang ang makakapag-unlock ng nakaraang buwan (password + dahilan, naka-log sa DT_Log).
+  • RMAS password lang ang makakapag-edit; lahat ng iba ay view only.
+  • Bagong store list: Setup → Store mapping → i-upload ang Excel (parehong format ng WK42).
+    Hindi mawawala ang grades ng stores na nandoon pa rin (tugma sa MCS SITE NAME).
+
+IBANG TOOL NA GUMAGAMIT NG PAREHONG URL
+  Gumagamit din nito ang Management Viewer (TS Scorecard) — pareho ang format (action=getAll),
+  kaya automatic din itong kukuha sa bagong tracker. Walang kailangang baguhin.

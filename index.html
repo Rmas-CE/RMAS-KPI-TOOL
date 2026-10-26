@@ -224,6 +224,9 @@ const QKEY = 'rmas_posm_deploy_queue';
 let DB = load();
 let UI = {view:'overview', ts:null, period:currentPeriod(), q:'', region:'', agency:'', tsF:'', bu:'', status:'', authed:false};
 let PASS = ''; try{ PASS = sessionStorage.getItem('rmas_posm_pass')||''; if(PASS) UI.authed=true; }catch(e){}
+/* Viewer key from the link (?key=dtv-...) — remembered on this device. Reading needs this key or the RMAS password. */
+const VIEW_KEY = (()=>{ let k=''; try{ k=(new URLSearchParams(location.search).get('key')||'').trim(); }catch(e){} try{ if(k) localStorage.setItem('rmas_dt_view_key',k); else k=localStorage.getItem('rmas_dt_view_key')||''; }catch(e){} return k; })();
+let noAccessShown=false;
 let QUEUE = []; try{ QUEUE = JSON.parse(localStorage.getItem(QKEY)||'[]'); }catch(e){}
 let SYNC = {state: ONLINE?'loading':'offline', at:null, serverEmpty:false};
 
@@ -470,12 +473,20 @@ function renderSetup(){
   </div>
   <div class="panel"><h3>Connection</h3>
     <p>${ONLINE?`Connected to the Google Sheet. Changes sync automatically every few seconds; other devices see them within ${POLL_MS/1000} seconds.`:'Not connected. Data is saved only in this browser. Paste the Apps Script Web app URL into API_URL to go online.'}</p>
-    ${ONLINE?`<p class="reg">KPI Grading feed: <span class="num" style="word-break:break-all">${esc(API_URL)}?action=tsScores&amp;period=${UI.period}</span></p>`:''}
+    ${ONLINE?`<p class="reg">The TS KPI Grading tool reads this tracker with the <b>KPI feed key</b> (see Access links). Nobody can read the data without a key or the RMAS password.</p>`:''}
   </div>
   <div class="panel"><h3>RMAS password</h3>
-    <p>Needed to change statuses and to unlock past months. Default is <span class="num">rmas2026</span>.</p>
+    ${UI.authed&&UI.mustChange?'<p style="color:#c0392b"><b>Please change the password now.</b> The tool is still using the default password, which anyone can find in the page code.</p>':''}
+    <p>Needed to change statuses, unlock past months and see the access links.</p>
     <div class="row"><button class="btn" type="button" id="chgPass">Change password</button></div>
-  </div>`;
+  </div>
+  ${ONLINE&&UI.authed?`<div class="panel"><h3>Access links</h3>
+    <p><b>Viewer link</b> — view only, for people who should see the tracker without the password.</p>
+    <div class="row"><input id="vLink" class="inp" readonly placeholder="Loading…" style="flex:1;min-width:200px"><button class="btn" type="button" id="vCopy">Copy</button><button class="btn" type="button" id="vNew">New link</button></div>
+    <p style="margin-top:12px"><b>KPI feed key</b> — paste it once in the TS KPI Grading tool (Import &amp; Sync › Deployment Tracker).</p>
+    <div class="row"><input id="fKey" class="inp" readonly placeholder="Loading…" style="flex:1;min-width:200px"><button class="btn" type="button" id="fCopy">Copy</button><button class="btn" type="button" id="fNew">New key</button></div>
+    <p class="reg">New link / New key makes the old one stop working — use it if a link was shared outside the team.</p>
+  </div>`:''}`;
   v.querySelector('#mapFile').onchange=e=>importMapping(e.target.files[0]);
   const cs=v.querySelector('#clearSample'); if(cs) cs.onclick=()=>ask({title:'Remove sample stores?',text:'All sample stores and their test statuses will be deleted.',input:false,ok:'Remove'},()=>{DB.stores=[];DB.months={};DB.sample=false;save();render();toast('Sample stores removed');});
   v.querySelectorAll('[data-unlock]').forEach(b=>b.onclick=()=>{
@@ -498,9 +509,19 @@ function renderSetup(){
     else { DB.closeDay=d; save(); render(); }
     UI.period=currentPeriod(); render(); toast('Close day saved'); };
   const rs=v.querySelector('#restore'); if(rs) rs.onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!d.ts||!d.stores)throw 0;DB=d;save();render();toast('Backup restored');}catch(_){toast('That file is not a tracker backup');}};r.readAsText(f);};
-  v.querySelector('#chgPass').onclick=()=>ask({title:'Change password',text:'Enter the current password, then the new one.',input:true,reason:true,reasonPh:'New password',ok:'Save'},async (pw,np)=>{if(!np||np.length<4)return 'New password needs at least 4 characters.';
-    if(ONLINE){ const r=await api({action:'changePass',pass:pw,newPass:np}); if(!r.ok) return r.auth===false?'Wrong current password.':(r.error||'Could not change.'); PASS=np; try{sessionStorage.setItem('rmas_posm_pass',np);}catch(e){} toast('Password changed'); return; }
+  v.querySelector('#chgPass').onclick=()=>ask({title:'Change password',text:'Enter the current password, then the new one.',input:true,reason:true,reasonPh:'New password',ok:'Save'},async (pw,np)=>{if(!np||np.length<6)return 'New password needs at least 6 characters.';
+    if(ONLINE){ const r=await api({action:'changePass',pass:pw,newPass:np}); if(!r.ok) return r.auth===false?'Wrong current password.':(r.error||'Could not change.'); PASS=np; try{sessionStorage.setItem('rmas_posm_pass',np);}catch(e){} UI.mustChange=false; render(); toast('Password changed'); return; }
     if(pw!==DB.pass)return 'Wrong current password.';DB.pass=np;save();toast('Password changed');});
+  if(ONLINE&&UI.authed){
+    const vLink=k=>location.origin+location.pathname+'?key='+encodeURIComponent(k);
+    const fill=r=>{ if(r.viewKey&&v.querySelector('#vLink')) v.querySelector('#vLink').value=vLink(r.viewKey); if(r.feedKey&&v.querySelector('#fKey')) v.querySelector('#fKey').value=r.feedKey; };
+    api({action:'getKeys',pass:PASS}).then(r=>{ if(r.ok) fill(r); else toast(r.error||'Could not load the access links'); }).catch(()=>{});
+    const copy=(id,label)=>{ const el=v.querySelector(id); if(!el.value) return; (navigator.clipboard?navigator.clipboard.writeText(el.value):Promise.reject()).then(()=>toast(label+' copied')).catch(()=>{ el.select(); toast('Select and copy it'); }); };
+    v.querySelector('#vCopy').onclick=()=>copy('#vLink','Viewer link');
+    v.querySelector('#fCopy').onclick=()=>copy('#fKey','Feed key');
+    v.querySelector('#vNew').onclick=()=>ask({title:'Make a new viewer link?',text:'Every viewer link sent before will stop working. Send the new link to the people who need it.',input:false,ok:'Make new link'},async ()=>{ const r=await api({action:'newViewKey',pass:PASS}); if(!r.ok) return r.error||'Could not change.'; fill(r); toast('New viewer link ready'); });
+    v.querySelector('#fNew').onclick=()=>ask({title:'Make a new KPI feed key?',text:'The TS KPI Grading tool stops pulling until you paste the new key there.',input:false,ok:'Make new key'},async ()=>{ const r=await api({action:'newFeedKey',pass:PASS}); if(!r.ok) return r.error||'Could not change.'; fill(r); toast('New feed key ready — paste it in the KPI Grading tool'); });
+  }
 }
 
 /* ===== Import mapping ===== */
@@ -587,8 +608,10 @@ document.getElementById('loginBtn').onclick=()=>{
     if(ONLINE){
       const r=await api({action:'login',pass:pw}); if(!r.ok) return r.error||'Wrong password.';
       PASS=pw; try{sessionStorage.setItem('rmas_posm_pass',pw);}catch(e){}
-      UI.authed=true;
+      UI.authed=true; UI.mustChange=!!r.mustChange;
       if(!r.hasStores) await seedServer();
+      await pull();
+      if(UI.mustChange){ UI.view='setup'; setTimeout(()=>toast('Please change the RMAS password now (Setup › RMAS password)'),300); }
     } else { if(pw!==DB.pass)return 'Wrong password.'; UI.authed=true; }
     render();toast('Logged in as RMAS');});
 };
@@ -628,9 +651,15 @@ function pullSoon(){ clearTimeout(pullTimer); pullTimer=setTimeout(pull,800); }
 function editingNow(){ const a=document.activeElement; return a && a.closest && a.closest('.tbl-wrap,#v-setup,dialog') && /INPUT|SELECT|TEXTAREA/.test(a.tagName); }
 async function pull(){
   if(!ONLINE) return;
+  if(!PASS && !VIEW_KEY){ noAccess(); return; }
   try{
-    const res=await fetch(API_URL+'?action=all&t='+Date.now()); const d=await res.json();
-    if(!d.ok) throw 0;
+    const d=await api(PASS?{action:'read',pass:PASS}:{action:'read',key:VIEW_KEY});
+    if(!d.ok){
+      if(d.keyError){ noAccess(); return; }
+      if(d.auth===false){ UI.authed=false; PASS=''; try{sessionStorage.removeItem('rmas_posm_pass');}catch(e){} toast('Password changed elsewhere. Log in again.'); if(VIEW_KEY) pullSoon(); else noAccess(); return; }
+      throw 0;
+    }
+    if(PASS) UI.mustChange=!!d.mustChange;
     SYNC.serverEmpty=!d.stores.length;
     const stores = d.stores.length ? d.stores : DB.stores;
     // keep changes still waiting to be sent on top of what the sheet returned
@@ -642,9 +671,14 @@ async function pull(){
     if(editingNow()) renderSync(); else render();
   }catch(e){ SYNC.state='err'; renderSync(); }
 }
+function noAccess(){
+  SYNC.state='nokey'; DB={...DB, months:{}, log:[]}; save(); if(editingNow()) renderSync(); else render();
+  if(!noAccessShown){ noAccessShown=true; toast('No access — log in as RMAS, or open the latest viewer link (ends with ?key=…)'); }
+}
 function renderSync(){
   const el=document.getElementById('syncState'); if(!el) return;
   if(!ONLINE){ el.className='sync'; el.textContent='Offline · this browser only'; return; }
+  if(SYNC.state==='nokey'){ el.className='sync err'; el.textContent='No access · log in or open the viewer link'; return; }
   const n=QUEUE.length;
   if(SYNC.state==='loading'){ el.className='sync busy'; el.textContent='Loading…'; }
   else if(SYNC.state==='busy'){ el.className='sync busy'; el.textContent='Saving '+n+'…'; }

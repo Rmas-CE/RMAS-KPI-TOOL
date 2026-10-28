@@ -86,6 +86,8 @@ button{cursor:pointer}
 
 .tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
 table{border-collapse:collapse;width:100%;min-width:720px}
+.lnk{background:none;border:0;padding:0;color:var(--accent);font-weight:600;font-size:12px}
+.trrow{display:flex;gap:8px;align-items:flex-start;padding:4px 0;font-size:13px}
 th,td{padding:9px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:middle}
 th{font-family:var(--f-display);text-transform:uppercase;letter-spacing:.08em;font-size:11.5px;color:var(--muted);font-weight:600;background:var(--surface2);position:sticky;top:0}
 tr:last-child td{border-bottom:0}
@@ -211,6 +213,47 @@ dialog .inp{width:100%;margin-bottom:10px}
     </div>
   </form>
 </dialog>
+
+<dialog id="stDlg">
+  <form id="stForm" method="dialog">
+    <h3>Edit store</h3>
+    <p id="stDlgText"></p>
+    <label class="reg" for="stName">Store name</label>
+    <input id="stName" class="inp" type="text" autocomplete="off">
+    <label class="reg" for="stTs">Trade Supervisor</label>
+    <input id="stTs" class="inp" type="text" list="tsList" autocomplete="off" placeholder="Pick from the list or type a new TS">
+    <label class="row reg" style="gap:8px;margin:-4px 0 10px;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="stFollow" checked style="margin-top:3px"><span>Use that TS's region</span></label>
+    <label class="reg" for="stRegion">Region</label>
+    <select id="stRegion" class="sel" style="width:100%;margin-bottom:10px"></select>
+    <div class="row" style="gap:8px;flex-wrap:nowrap">
+      <div style="flex:1;min-width:0"><label class="reg" for="stDealer">Dealer</label><input id="stDealer" class="inp" type="text" autocomplete="off"></div>
+      <div style="width:110px"><label class="reg" for="stAgency">Agency</label><input id="stAgency" class="inp" type="text" list="agList" autocomplete="off"></div>
+    </div>
+    <p class="err" id="stErr"></p>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn ghost" type="button" id="stCancel">Cancel</button>
+      <button class="btn primary" type="submit" id="stOk">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="trDlg">
+  <form id="trForm" method="dialog">
+    <h3>Transfer stores</h3>
+    <p id="trDlgText"></p>
+    <label class="row reg" style="gap:8px;margin-bottom:6px"><input type="checkbox" id="trAll"><span>Select all</span></label>
+    <div id="trList" style="max-height:240px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:6px 10px;margin-bottom:10px"></div>
+    <label class="reg" for="trTs">Move to Trade Supervisor</label>
+    <input id="trTs" class="inp" type="text" list="tsList" autocomplete="off" placeholder="Pick from the list or type a new TS">
+    <label class="row reg" style="gap:8px;margin:-4px 0 10px;flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" id="trFollow" checked style="margin-top:3px"><span>Move the stores to that TS's region</span></label>
+    <p class="err" id="trErr"></p>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn ghost" type="button" id="trCancel">Cancel</button>
+      <button class="btn primary" type="submit" id="trOk">Transfer</button>
+    </div>
+  </form>
+</dialog>
+<datalist id="tsList"></datalist><datalist id="agList"></datalist>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
@@ -376,10 +419,11 @@ function storeTable(list, showTs){
   const m=DB.months[UI.period]||{}, ed=canEdit();
   if(!list.length) return `<div class="tbl-wrap"><div class="empty">No stores match. ${DB.stores.length?'Try another filter.':'Import your store mapping in Setup.'}</div></div>`;
   return `<div class="tbl-wrap"><table><thead><tr><th>Store</th>${showTs?'<th>Trade Supervisor</th>':''}${BUS.map(b=>`<th>${b}</th>`).join('')}<th class="r">Store score</th><th>Remarks / missing POSM</th></tr></thead><tbody>
-  ${list.map(s=>{const t=tally([s],UI.period);const rm=(m[s.id+'|note']||{}).s||'';return `<tr><td><div class="tsname">${esc(s.name)}</div><div class="reg">${esc([s.dealer,s.region,s.agency].filter(Boolean).join(' · '))}</div></td>${showTs?`<td>${esc(s.ts)}</td>`:''}${BUS.map(b=>`<td>${statusSelect(s.id,b,(m[s.id+'|'+b]||{}).s,ed)}</td>`).join('')}<td class="r num">${fmt(t.pct)}</td><td><input class="note" data-k="${s.id}|note" value="${esc(rm)}" placeholder="${ed?'e.g. missing HA wobbler':''}" ${ed?'':'disabled'} aria-label="Remarks for ${esc(s.name)}"></td></tr>`}).join('')}
+  ${list.map(s=>{const t=tally([s],UI.period);const rm=(m[s.id+'|note']||{}).s||'';return `<tr><td><div class="tsname">${esc(s.name)}</div><div class="reg">${esc([s.dealer,s.region,s.agency].filter(Boolean).join(' · '))}${UI.authed?` · <button class="lnk" type="button" data-edit-store="${s.id}">Edit / move</button>`:''}</div></td>${showTs?`<td>${esc(s.ts)}</td>`:''}${BUS.map(b=>`<td>${statusSelect(s.id,b,(m[s.id+'|'+b]||{}).s,ed)}</td>`).join('')}<td class="r num">${fmt(t.pct)}</td><td><input class="note" data-k="${s.id}|note" value="${esc(rm)}" placeholder="${ed?'e.g. missing HA wobbler':''}" ${ed?'':'disabled'} aria-label="Remarks for ${esc(s.name)}"></td></tr>`}).join('')}
   </tbody></table></div>`;
 }
 function bindEdits(root){
+  root.querySelectorAll('[data-edit-store]').forEach(b=>b.onclick=()=>editStore(b.dataset.editStore));
   root.querySelectorAll('select.st').forEach(sel=>sel.onchange=e=>{
     setEntry(sel.dataset.k, sel.value);
     sel.className='st s-'+STATUS[sel.value].cls;
@@ -409,7 +453,7 @@ function renderTS(){
   const byBu = BUS.map(b=>({b,t:tally(st,UI.period,b)}));
   const v=document.getElementById('v-ts');
   v.innerHTML = `<button class="back" type="button" id="back">← All Trade Supervisors</button>
-  <div class="ts-head"><div><div class="reg">${esc(t0.region)}${t0.agency?' · '+esc(t0.agency):''} · ${st.length} stores · ${periodLabel(UI.period)}</div><h2>${esc(t0.name)}</h2>${UI.authed?`<button class="btn ghost" type="button" id="editTs" style="margin-top:8px;min-height:30px;padding:3px 10px">Edit name / region</button>`:''}</div>
+  <div class="ts-head"><div><div class="reg">${esc(t0.region)}${t0.agency?' · '+esc(t0.agency):''} · ${st.length} stores · ${periodLabel(UI.period)}</div><h2>${esc(t0.name)}</h2>${UI.authed?`<div class="row" style="margin-top:8px"><button class="btn ghost" type="button" id="editTs" style="min-height:30px;padding:3px 10px">Edit name / region</button><button class="btn ghost" type="button" id="trBtn" style="min-height:30px;padding:3px 10px">Transfer stores to another TS</button></div>`:''}</div>
     <div><div class="score num">${fmt(t.pct)}</div><span class="pill g-${g.cls}">${g.label}</span></div>
     ${byBu.map(x=>`<div style="min-width:120px"><div class="reg">${x.b}</div><div class="num" style="font-size:18px">${fmt(x.t.pct)}</div>${meter(x.t)}</div>`).join('')}
   </div>
@@ -418,6 +462,7 @@ function renderTS(){
   ${storeTable(st,false)}`;
   v.querySelector('#back').onclick=()=>{UI.view='overview';render();};
   const et=v.querySelector('#editTs'); if(et) et.onclick=()=>editTs(t0.name);
+  const tb=v.querySelector('#trBtn'); if(tb) tb.onclick=()=>transferStores(t0.name);
   bindEdits(v);
   const cp=v.querySelector('#copyPrev'); if(cp) cp.onclick=()=>{copyPrev(st);};
   const ac=v.querySelector('#allC'); if(ac) ac.onclick=()=>{const m=monthData(UI.period);const items=[];st.forEach(s=>BUS.forEach(b=>{if(!m[s.id+'|'+b]) items.push({key:s.id+'|'+b,value:'C'});}));setMany(items);render();toast(items.length+' displays marked Complete');};
@@ -564,18 +609,99 @@ document.getElementById('tsForm').onsubmit=async e=>{
   const parts=[]; if(target!==old) parts.push(clash?'merged into '+target:'renamed to '+target); if(regChanged) parts.push('region set to '+reg);
   const stores=DB.stores.map(s=>s.ts===old?{...s,ts:target,region:regChanged?reg:s.region}:s);
   const msg='TS '+old+': '+parts.join(', ');
+  if(!await saveStores(stores,msg,'tsOk',err)) return;
+  if(UI.ts===old) UI.ts=target; if(UI.tsF===old) UI.tsF=target;
+  d.close(); render(); toast('Trade Supervisor updated');
+};
+
+/* Save a changed store list to the Google Sheet (same path as a store-list import), then locally */
+async function saveStores(stores,msg,okId,err){
+  const ok=document.getElementById(okId);
   if(ONLINE){
-    document.getElementById('tsOk').disabled=true; err('');
+    ok.disabled=true; err('');
     try{
       const r=await api({action:'importStores',pass:PASS,stores,note:msg});
-      if(!r.ok){ document.getElementById('tsOk').disabled=false; return err(r.auth===false?'Password changed elsewhere. Log in again.':(r.error||'Could not save.')); }
-    }catch(_){ document.getElementById('tsOk').disabled=false; return err('No connection. Try again.'); }
+      if(!r.ok){ ok.disabled=false; err(r.auth===false?'Password changed elsewhere. Log in again.':(r.error||'Could not save.')); return false; }
+    }catch(_){ ok.disabled=false; err('No connection. Try again.'); return false; }
   }
   DB.stores=stores; DB.ts=deriveTs(stores);
   if(!ONLINE) DB.log.push(new Date().toLocaleString()+' · '+msg);
-  if(UI.ts===old) UI.ts=target; if(UI.tsF===old) UI.tsF=target;
-  save(); d.close(); render(); toast('Trade Supervisor updated');
-  if(ONLINE) pullSoon();
+  save(); if(ONLINE) pullSoon();
+  return true;
+}
+/* An existing TS typed in any name order resolves to that TS; otherwise it is a new TS */
+function resolveTs(v){ const n=normName(v); if(!n) return ''; const hit=DB.ts.find(t=>t.name===n||nameKey(t.name)===nameKey(n)); return hit?hit.name:n; }
+function allRegions(){ return sortRegions([...new Set([...REGION_ORDER,...DB.stores.map(s=>s.region)].filter(Boolean))]); }
+function fillLists(){
+  document.getElementById('tsList').innerHTML=DB.ts.map(t=>`<option value="${esc(t.name)}">${esc(t.region)}</option>`).join('');
+  document.getElementById('agList').innerHTML=agencies().map(a=>`<option value="${esc(a)}">`).join('');
+}
+
+/* ===== Edit / move one store ===== */
+function editStore(id){
+  if(!UI.authed){ toast('Log in as RMAS first'); return; }
+  const s=DB.stores.find(x=>x.id===id); if(!s) return;
+  fillLists();
+  const d=document.getElementById('stDlg');
+  document.getElementById('stDlgText').textContent='Now with '+s.ts+' · '+s.region;
+  document.getElementById('stName').value=s.name;
+  document.getElementById('stTs').value=s.ts;
+  document.getElementById('stRegion').innerHTML=allRegions().map(r=>`<option ${r===s.region?'selected':''}>${esc(r)}</option>`).join('');
+  document.getElementById('stDealer').value=s.dealer||'';
+  document.getElementById('stAgency').value=s.agency||'';
+  document.getElementById('stFollow').checked=true;
+  document.getElementById('stErr').textContent=''; document.getElementById('stOk').disabled=false;
+  d._id=id; d.showModal(); document.getElementById('stTs').focus();
+}
+document.getElementById('stTs').oninput=()=>{ if(!document.getElementById('stFollow').checked) return; const t=DB.ts.find(x=>x.name===resolveTs(document.getElementById('stTs').value)); if(t) document.getElementById('stRegion').value=t.region; };
+document.getElementById('stCancel').onclick=()=>document.getElementById('stDlg').close();
+document.getElementById('stForm').onsubmit=async e=>{
+  e.preventDefault();
+  const d=document.getElementById('stDlg'), s=DB.stores.find(x=>x.id===d._id); if(!s){d.close();return;}
+  const err=m=>{document.getElementById('stErr').textContent=m;};
+  const name=normName(document.getElementById('stName').value), ts=resolveTs(document.getElementById('stTs').value);
+  if(!name) return err('Store name cannot be empty.');
+  if(!ts) return err('Pick a Trade Supervisor.');
+  if(DB.stores.some(x=>x.id!==s.id&&x.name===name)) return err('Another store already has that name.');
+  const tt=DB.ts.find(x=>x.name===ts);
+  const region=(document.getElementById('stFollow').checked&&tt&&ts!==s.ts)?tt.region:document.getElementById('stRegion').value;
+  const n={...s,name,ts,region,dealer:normName(document.getElementById('stDealer').value),agency:normName(document.getElementById('stAgency').value)};
+  const parts=[]; if(n.name!==s.name) parts.push('renamed to '+n.name); if(n.ts!==s.ts) parts.push('moved from '+s.ts+' to '+n.ts+(tt?'':' (new TS)')); if(n.region!==s.region) parts.push('region '+n.region); if(n.dealer!==(s.dealer||'')) parts.push('dealer '+n.dealer); if(n.agency!==(s.agency||'')) parts.push('agency '+n.agency);
+  if(!parts.length){ d.close(); return; }
+  if(!await saveStores(DB.stores.map(x=>x.id===s.id?n:x),'Store '+s.name+': '+parts.join(', '),'stOk',err)) return;
+  if(UI.view==='ts'&&!DB.ts.find(x=>x.name===UI.ts)) UI.view='overview';
+  d.close(); render(); toast(n.ts!==s.ts?'Store moved to '+n.ts:'Store updated');
+};
+
+/* ===== Transfer several stores from one TS to another ===== */
+function transferStores(from){
+  if(!UI.authed){ toast('Log in as RMAS first'); return; }
+  const st=storesOf(from).sort((a,b)=>a.name.localeCompare(b.name)); if(!st.length) return;
+  fillLists();
+  const d=document.getElementById('trDlg');
+  document.getElementById('trDlgText').textContent='From '+from+' · tick the stores to move.';
+  document.getElementById('trList').innerHTML=st.map(s=>`<label class="trrow"><input type="checkbox" value="${s.id}"><span>${esc(s.name)}<span class="reg"> · ${esc(s.region)}</span></span></label>`).join('');
+  document.getElementById('trAll').checked=false;
+  document.getElementById('trTs').value=''; document.getElementById('trFollow').checked=true;
+  document.getElementById('trErr').textContent=''; document.getElementById('trOk').disabled=false;
+  d._from=from; d.showModal();
+}
+document.getElementById('trAll').onchange=e=>document.querySelectorAll('#trList input').forEach(c=>c.checked=e.target.checked);
+document.getElementById('trCancel').onclick=()=>document.getElementById('trDlg').close();
+document.getElementById('trForm').onsubmit=async e=>{
+  e.preventDefault();
+  const d=document.getElementById('trDlg'), from=d._from;
+  const err=m=>{document.getElementById('trErr').textContent=m;};
+  const ids=new Set([...document.querySelectorAll('#trList input:checked')].map(c=>c.value));
+  const to=resolveTs(document.getElementById('trTs').value);
+  if(!ids.size) return err('Tick at least one store.');
+  if(!to) return err('Pick the Trade Supervisor to move them to.');
+  if(to===from) return err('That is the same Trade Supervisor.');
+  const tt=DB.ts.find(x=>x.name===to), follow=document.getElementById('trFollow').checked&&tt;
+  const stores=DB.stores.map(s=>ids.has(s.id)?{...s,ts:to,region:follow?tt.region:s.region}:s);
+  if(!await saveStores(stores,`${ids.size} store(s) moved from ${from} to ${to}${tt?'':' (new TS)'}`,'trOk',err)) return;
+  if(!DB.ts.find(x=>x.name===UI.ts)) UI.ts=to;
+  d.close(); render(); toast(ids.size+' store(s) moved to '+to);
 };
 
 function normName(n){ return String(n||'').toUpperCase().replace(/\s+/g,' ').trim(); }

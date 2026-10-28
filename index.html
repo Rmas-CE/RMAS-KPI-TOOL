@@ -216,7 +216,7 @@ dialog .inp{width:100%;margin-bottom:10px}
 
 <dialog id="stDlg">
   <form id="stForm" method="dialog">
-    <h3>Edit store</h3>
+    <h3 id="stTitle">Edit store</h3>
     <p id="stDlgText"></p>
     <label class="reg" for="stName">Store name</label>
     <input id="stName" class="inp" type="text" autocomplete="off">
@@ -453,7 +453,7 @@ function renderTS(){
   const byBu = BUS.map(b=>({b,t:tally(st,UI.period,b)}));
   const v=document.getElementById('v-ts');
   v.innerHTML = `<button class="back" type="button" id="back">← All Trade Supervisors</button>
-  <div class="ts-head"><div><div class="reg">${esc(t0.region)}${t0.agency?' · '+esc(t0.agency):''} · ${st.length} stores · ${periodLabel(UI.period)}</div><h2>${esc(t0.name)}</h2>${UI.authed?`<div class="row" style="margin-top:8px"><button class="btn ghost" type="button" id="editTs" style="min-height:30px;padding:3px 10px">Edit name / region</button><button class="btn ghost" type="button" id="trBtn" style="min-height:30px;padding:3px 10px">Transfer stores to another TS</button></div>`:''}</div>
+  <div class="ts-head"><div><div class="reg">${esc(t0.region)}${t0.agency?' · '+esc(t0.agency):''} · ${st.length} stores · ${periodLabel(UI.period)}</div><h2>${esc(t0.name)}</h2>${UI.authed?`<div class="row" style="margin-top:8px"><button class="btn ghost" type="button" id="editTs" style="min-height:30px;padding:3px 10px">Edit name / region</button><button class="btn ghost" type="button" id="trBtn" style="min-height:30px;padding:3px 10px">Transfer stores to another TS</button><button class="btn ghost" type="button" id="addSt" style="min-height:30px;padding:3px 10px">+ Add store</button></div>`:''}</div>
     <div><div class="score num">${fmt(t.pct)}</div><span class="pill g-${g.cls}">${g.label}</span></div>
     ${byBu.map(x=>`<div style="min-width:120px"><div class="reg">${x.b}</div><div class="num" style="font-size:18px">${fmt(x.t.pct)}</div>${meter(x.t)}</div>`).join('')}
   </div>
@@ -463,6 +463,7 @@ function renderTS(){
   v.querySelector('#back').onclick=()=>{UI.view='overview';render();};
   const et=v.querySelector('#editTs'); if(et) et.onclick=()=>editTs(t0.name);
   const tb=v.querySelector('#trBtn'); if(tb) tb.onclick=()=>transferStores(t0.name);
+  const as=v.querySelector('#addSt'); if(as) as.onclick=()=>addStore(t0.name);
   bindEdits(v);
   const cp=v.querySelector('#copyPrev'); if(cp) cp.onclick=()=>{copyPrev(st);};
   const ac=v.querySelector('#allC'); if(ac) ac.onclick=()=>{const m=monthData(UI.period);const items=[];st.forEach(s=>BUS.forEach(b=>{if(!m[s.id+'|'+b]) items.push({key:s.id+'|'+b,value:'C'});}));setMany(items);render();toast(items.length+' displays marked Complete');};
@@ -485,7 +486,7 @@ function renderStores(){
   list.sort((a,b)=>a.ts.localeCompare(b.ts)||a.name.localeCompare(b.name));
   const shown=list.slice(0,300);
   const v=document.getElementById('v-stores');
-  v.innerHTML=`<div class="sec-h"><div><h2>All stores</h2><p>${list.length} stores${list.length>300?' · showing first 300, narrow the filters to see the rest':''}</p></div></div>
+  v.innerHTML=`<div class="sec-h"><div><h2>All stores</h2><p>${list.length} stores${list.length>300?' · showing first 300, narrow the filters to see the rest':''}</p></div>${UI.authed?`<button class="btn" type="button" id="addSt2">+ Add store</button>`:''}</div>
   <div class="filters">
     <input class="inp" id="fq" type="search" placeholder="Search store, dealer or TS" value="${esc(UI.q)}" aria-label="Search">
     <select class="sel" id="fr" aria-label="Region"><option value="">All regions</option>${regions.map(r=>`<option ${UI.region===r?'selected':''}>${esc(r)}</option>`).join('')}</select>
@@ -500,6 +501,7 @@ function renderStores(){
   v.querySelector('#fa').onchange=e=>{UI.agency=e.target.value;UI.tsF='';render();};
   v.querySelector('#fb').onchange=e=>{UI.bu=e.target.value;render();};
   v.querySelector('#fs').onchange=e=>{UI.status=e.target.value;render();};
+  const as2=v.querySelector('#addSt2'); if(as2) as2.onclick=()=>addStore(UI.tsF||'');
   bindEdits(v);
 }
 
@@ -643,6 +645,7 @@ function editStore(id){
   const s=DB.stores.find(x=>x.id===id); if(!s) return;
   fillLists();
   const d=document.getElementById('stDlg');
+  document.getElementById('stTitle').textContent='Edit store'; document.getElementById('stOk').textContent='Save';
   document.getElementById('stDlgText').textContent='Now with '+s.ts+' · '+s.region;
   document.getElementById('stName').value=s.name;
   document.getElementById('stTs').value=s.ts;
@@ -653,12 +656,37 @@ function editStore(id){
   document.getElementById('stErr').textContent=''; document.getElementById('stOk').disabled=false;
   d._id=id; d.showModal(); document.getElementById('stTs').focus();
 }
+function addStore(ts){
+  if(!UI.authed){ toast('Log in as RMAS first'); return; }
+  fillLists();
+  const t=DB.ts.find(x=>x.name===ts), ag=agencies();
+  const d=document.getElementById('stDlg');
+  document.getElementById('stTitle').textContent='Add store'; document.getElementById('stOk').textContent='Add store';
+  document.getElementById('stDlgText').textContent=t?'New store for '+t.name+' · '+t.region:'New store';
+  document.getElementById('stName').value=''; document.getElementById('stTs').value=ts||'';
+  document.getElementById('stRegion').innerHTML=allRegions().map(r=>`<option ${t&&r===t.region?'selected':''}>${esc(r)}</option>`).join('');
+  document.getElementById('stDealer').value='';
+  document.getElementById('stAgency').value=t?t.agency||'':(ag.length===1?ag[0]:'');
+  document.getElementById('stFollow').checked=true;
+  document.getElementById('stErr').textContent=''; document.getElementById('stOk').disabled=false;
+  d._id=null; d.showModal(); document.getElementById('stName').focus();
+}
 document.getElementById('stTs').oninput=()=>{ if(!document.getElementById('stFollow').checked) return; const t=DB.ts.find(x=>x.name===resolveTs(document.getElementById('stTs').value)); if(t) document.getElementById('stRegion').value=t.region; };
 document.getElementById('stCancel').onclick=()=>document.getElementById('stDlg').close();
 document.getElementById('stForm').onsubmit=async e=>{
   e.preventDefault();
-  const d=document.getElementById('stDlg'), s=DB.stores.find(x=>x.id===d._id); if(!s){d.close();return;}
-  const err=m=>{document.getElementById('stErr').textContent=m;};
+  const d=document.getElementById('stDlg'), err=m=>{document.getElementById('stErr').textContent=m;};
+  if(d._id===null){
+    const name=normName(document.getElementById('stName').value), ts=resolveTs(document.getElementById('stTs').value);
+    if(!name) return err('Type the store name.');
+    if(!ts) return err('Pick a Trade Supervisor.');
+    const dup=DB.stores.find(x=>x.name===name); if(dup) return err('That store already exists under '+dup.ts+'. Use Edit / move on it instead.');
+    const tt=DB.ts.find(x=>x.name===ts), maxId=DB.stores.reduce((a,x)=>Math.max(a,parseInt(String(x.id).slice(1))||0),0);
+    const n={id:'W'+String(maxId+1).padStart(4,'0'),name,ts,region:(document.getElementById('stFollow').checked&&tt)?tt.region:document.getElementById('stRegion').value,dealer:normName(document.getElementById('stDealer').value),agency:normName(document.getElementById('stAgency').value)};
+    if(!await saveStores(DB.stores.concat(n),'Store added: '+name+' → '+ts+(tt?'':' (new TS)'),'stOk',err)) return;
+    d.close(); render(); toast('Store added to '+ts); return;
+  }
+  const s=DB.stores.find(x=>x.id===d._id); if(!s){d.close();return;}
   const name=normName(document.getElementById('stName').value), ts=resolveTs(document.getElementById('stTs').value);
   if(!name) return err('Store name cannot be empty.');
   if(!ts) return err('Pick a Trade Supervisor.');

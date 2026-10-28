@@ -195,6 +195,23 @@ dialog .inp{width:100%;margin-bottom:10px}
   </form>
 </dialog>
 
+<dialog id="tsDlg">
+  <form id="tsForm" method="dialog">
+    <h3>Edit Trade Supervisor</h3>
+    <p id="tsDlgText"></p>
+    <label class="reg" for="tsName">Name (SURNAME, FIRST NAME)</label>
+    <input id="tsName" class="inp" type="text" autocomplete="off">
+    <label class="reg" for="tsRegion">Region</label>
+    <select id="tsRegion" class="sel" style="width:100%;margin-bottom:10px"></select>
+    <p class="reg" id="tsNote" style="margin:0 0 10px"></p>
+    <p class="err" id="tsErr"></p>
+    <div class="row" style="justify-content:flex-end">
+      <button class="btn ghost" type="button" id="tsCancel">Cancel</button>
+      <button class="btn primary" type="submit" id="tsOk">Save</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 /* ===== Baked data: WK42 TS store list — [store, trade supervisor, region, dealer, agency] ===== */
@@ -392,7 +409,7 @@ function renderTS(){
   const byBu = BUS.map(b=>({b,t:tally(st,UI.period,b)}));
   const v=document.getElementById('v-ts');
   v.innerHTML = `<button class="back" type="button" id="back">← All Trade Supervisors</button>
-  <div class="ts-head"><div><div class="reg">${esc(t0.region)}${t0.agency?' · '+esc(t0.agency):''} · ${st.length} stores · ${periodLabel(UI.period)}</div><h2>${esc(t0.name)}</h2></div>
+  <div class="ts-head"><div><div class="reg">${esc(t0.region)}${t0.agency?' · '+esc(t0.agency):''} · ${st.length} stores · ${periodLabel(UI.period)}</div><h2>${esc(t0.name)}</h2>${UI.authed?`<button class="btn ghost" type="button" id="editTs" style="margin-top:8px;min-height:30px;padding:3px 10px">Edit name / region</button>`:''}</div>
     <div><div class="score num">${fmt(t.pct)}</div><span class="pill g-${g.cls}">${g.label}</span></div>
     ${byBu.map(x=>`<div style="min-width:120px"><div class="reg">${x.b}</div><div class="num" style="font-size:18px">${fmt(x.t.pct)}</div>${meter(x.t)}</div>`).join('')}
   </div>
@@ -400,6 +417,7 @@ function renderTS(){
   ${canEdit()?`<div class="row" style="margin-bottom:10px"><button class="btn" type="button" id="copyPrev">Copy last month's statuses</button><button class="btn ghost" type="button" id="allC">Mark unchecked as Complete</button></div>`:''}
   ${storeTable(st,false)}`;
   v.querySelector('#back').onclick=()=>{UI.view='overview';render();};
+  const et=v.querySelector('#editTs'); if(et) et.onclick=()=>editTs(t0.name);
   bindEdits(v);
   const cp=v.querySelector('#copyPrev'); if(cp) cp.onclick=()=>{copyPrev(st);};
   const ac=v.querySelector('#allC'); if(ac) ac.onclick=()=>{const m=monthData(UI.period);const items=[];st.forEach(s=>BUS.forEach(b=>{if(!m[s.id+'|'+b]) items.push({key:s.id+'|'+b,value:'C'});}));setMany(items);render();toast(items.length+' displays marked Complete');};
@@ -444,6 +462,13 @@ function renderSetup(){
   const v=document.getElementById('v-setup');
   const pastLocked=periods().filter(p=>p<currentPeriod());
   v.innerHTML=`
+  ${UI.authed?`<div class="panel"><h3>Trade Supervisors</h3>
+    <p>Fix a TS name or move a TS to the region they really belong to. Statuses already entered stay with their stores.</p>
+    <div class="filters"><input class="inp" id="tsq" type="search" placeholder="Search TS or region" value="${esc(UI.tsq||'')}" aria-label="Search TS"></div>
+    <div class="tbl-wrap" style="max-height:420px;overflow:auto"><table style="min-width:560px"><thead><tr><th>Trade Supervisor</th><th>Region</th><th>Agency</th><th class="r">Stores</th><th></th></tr></thead><tbody>
+    ${DB.ts.filter(t=>{const q=(UI.tsq||'').toLowerCase();return !q||t.name.toLowerCase().includes(q)||t.region.toLowerCase().includes(q);}).map(t=>{const st=storesOf(t.name);const rs=sortRegions([...new Set(st.map(s=>s.region))]);return `<tr><td class="tsname">${esc(t.name)}</td><td>${esc(t.region)}${rs.length>1?`<div class="reg">stores in ${rs.map(esc).join(', ')}</div>`:''}</td><td>${esc(t.agency||'')}</td><td class="r num">${st.length}</td><td class="r"><button class="btn ghost" type="button" data-edit-ts="${esc(t.name)}" style="min-height:30px;padding:3px 10px">Edit</button></td></tr>`;}).join('')}
+    </tbody></table></div>
+  </div>`:''}
   <div class="panel"><h3>Store mapping</h3>
     <p>Loaded from the WK42 TS store list. For a newer list, upload an Excel or CSV file with the columns <b>STORE NAME</b> (or MCS SITE NAME), <b>TRADE SUPERVISOR</b>, <b>REGION</b>, <b>DEALER</b> and <b>AGENCY</b>. Stores already graded keep their statuses. A TS whose name is written in a different order is merged into one, and a TS with stores in two regions goes to the region where they hold the most stores.</p>
     <div class="row"><input type="file" id="mapFile" accept=".xlsx,.xls,.csv" class="inp"><span class="reg">${DB.stores.length} stores · ${DB.ts.length} TS · ${agencies().join(' / ')}</span></div>
@@ -474,6 +499,8 @@ function renderSetup(){
     <p class="reg">New link makes the old one stop working — use it if the link was shared outside the team.</p>
   </div>`:''}`;
   v.querySelector('#mapFile').onchange=e=>importMapping(e.target.files[0]);
+  const tq=v.querySelector('#tsq'); if(tq) tq.oninput=()=>{UI.tsq=tq.value;clearTimeout(tq._t);tq._t=setTimeout(()=>{render();const n=document.getElementById('tsq');if(n){n.focus();n.setSelectionRange(n.value.length,n.value.length);}},250);};
+  v.querySelectorAll('[data-edit-ts]').forEach(b=>b.onclick=()=>editTs(b.dataset.editTs));
   const cs=v.querySelector('#clearSample'); if(cs) cs.onclick=()=>ask({title:'Remove sample stores?',text:'All sample stores and their test statuses will be deleted.',input:false,ok:'Remove'},()=>{DB.stores=[];DB.months={};DB.sample=false;save();render();toast('Sample stores removed');});
   v.querySelectorAll('[data-unlock]').forEach(b=>b.onclick=()=>{
     const p=b.dataset.unlock;
@@ -509,6 +536,48 @@ function renderSetup(){
 }
 
 /* ===== Import mapping ===== */
+/* ===== Edit a Trade Supervisor (name / region) ===== */
+function editTs(name){
+  if(!UI.authed){ toast('Log in as RMAS first'); return; }
+  const t=DB.ts.find(x=>x.name===name); if(!t) return;
+  const st=storesOf(name), d=document.getElementById('tsDlg');
+  const rs=sortRegions([...new Set(st.map(s=>s.region))]);
+  const regs=sortRegions([...new Set([...REGION_ORDER,...DB.stores.map(s=>s.region)].filter(Boolean))]);
+  document.getElementById('tsDlgText').textContent=`${st.length} stores · now in ${t.region}${rs.length>1?' (stores in '+rs.join(', ')+')':''}`;
+  const nm=document.getElementById('tsName'); nm.value=name;
+  document.getElementById('tsRegion').innerHTML=regs.map(r=>`<option ${r===t.region?'selected':''}>${esc(r)}</option>`).join('');
+  document.getElementById('tsNote').textContent=`Changing the region moves all ${st.length} of their stores to it, so region totals and filters follow the TS.`;
+  document.getElementById('tsErr').textContent=''; document.getElementById('tsOk').disabled=false;
+  d._ts=name; d._merge=null; d.showModal(); nm.focus();
+}
+document.getElementById('tsCancel').onclick=()=>document.getElementById('tsDlg').close();
+document.getElementById('tsForm').onsubmit=async e=>{
+  e.preventDefault();
+  const d=document.getElementById('tsDlg'), old=d._ts, t=DB.ts.find(x=>x.name===old); if(!t){d.close();return;}
+  const err=m=>{document.getElementById('tsErr').textContent=m;};
+  const nn=normName(document.getElementById('tsName').value), reg=document.getElementById('tsRegion').value;
+  if(!nn) return err('Name cannot be empty.');
+  const clash=DB.ts.find(x=>x.name!==old&&(x.name===nn||nameKey(x.name)===nameKey(nn)));
+  if(clash&&d._merge!==clash.name){ d._merge=clash.name; return err(`${clash.name} already exists. Press Save again to merge both into one TS.`); }
+  const target=clash?clash.name:nn, regChanged=reg!==t.region||storesOf(old).some(s=>s.region!==reg);
+  if(target===old&&!regChanged){ d.close(); return; }
+  const parts=[]; if(target!==old) parts.push(clash?'merged into '+target:'renamed to '+target); if(regChanged) parts.push('region set to '+reg);
+  const stores=DB.stores.map(s=>s.ts===old?{...s,ts:target,region:regChanged?reg:s.region}:s);
+  const msg='TS '+old+': '+parts.join(', ');
+  if(ONLINE){
+    document.getElementById('tsOk').disabled=true; err('');
+    try{
+      const r=await api({action:'importStores',pass:PASS,stores,note:msg});
+      if(!r.ok){ document.getElementById('tsOk').disabled=false; return err(r.auth===false?'Password changed elsewhere. Log in again.':(r.error||'Could not save.')); }
+    }catch(_){ document.getElementById('tsOk').disabled=false; return err('No connection. Try again.'); }
+  }
+  DB.stores=stores; DB.ts=deriveTs(stores);
+  if(!ONLINE) DB.log.push(new Date().toLocaleString()+' · '+msg);
+  if(UI.ts===old) UI.ts=target; if(UI.tsF===old) UI.tsF=target;
+  save(); d.close(); render(); toast('Trade Supervisor updated');
+  if(ONLINE) pullSoon();
+};
+
 function normName(n){ return String(n||'').toUpperCase().replace(/\s+/g,' ').trim(); }
 function nameKey(n){ return normName(n).replace(/[^A-Z0-9 ]/g,' ').split(/\s+/).filter(Boolean).sort().join(' '); }
 function importMapping(file){
